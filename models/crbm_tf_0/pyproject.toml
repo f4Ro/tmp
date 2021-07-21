@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "crbm_tf_0"
+version = "0.1.0"
+description = ""
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.5"
+tensorflow = "0.12.1"
+
+[tool.poetry.dev-dependencies]
+flake8 = "^3.9.1"
+autopep8 = "^1.5.7"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
