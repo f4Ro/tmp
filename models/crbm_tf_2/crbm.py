@@ -1,5 +1,11 @@
 from __future__ import annotations, division
 
+# Set seeds
+from numpy.random import seed
+from tensorflow.random import set_seed
+seed(1)
+set_seed(10)
+
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -7,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from util.plotter import Plotter
+from shared_code.per_rms_diff import per_rms_diff
 
 harry = Plotter('CRBM_dev', plt)
 
@@ -459,12 +466,35 @@ if __name__ == "__main__":
         up_stride=stride,
         v_height=sequence_length, v_width=1, v_channels=1,
     )
-    plt.plot(inputs.numpy().reshape(-1))
-    harry('input_first')
 
-    res = c.do_contrastive_divergence(inputs)
-    print('CURRENT LOSS: ', res[3])
-    res = c.do_contrastive_divergence(inputs)
-    print('CURRENT LOSS: ', res[3])
-    res = c.do_contrastive_divergence(inputs)
-    print('CURRENT LOSS: ', res[3])
+    # Quickly hacked together, overfitting the C-RBM on a single example
+    # Checkin performance before
+    p1 = c.infer_probability(inputs, 'forward')
+    a1 = c.draw_samples(p1)
+
+    pv1 = c.infer_probability(a1, 'backward')
+    av1 = c.draw_samples(pv1, 'backward')
+    print('PRMS before', per_rms_diff(inputs, av1))
+
+    plt.plot(inputs.numpy().reshape(-1), label='original')
+    plt.plot(av1.numpy().reshape(-1), label='reconstruction')
+    plt.legend()
+    harry('before')
+
+    # Training for some epochs
+    for _ in range(2000):
+        print(c.do_contrastive_divergence(inputs)[3].numpy())
+
+
+    # Checking performance afterwards
+    p = c.infer_probability(inputs, 'forward')
+    a = c.draw_samples(p)
+
+    pv = c.infer_probability(a, 'backward')
+    av = c.draw_samples(pv, 'backward')
+    print('PRMS after', per_rms_diff(inputs, av))
+
+    plt.plot(inputs.numpy().reshape(-1), label='original')
+    plt.plot(av.numpy().reshape(-1), label='reconstruction')
+    plt.legend()
+    harry('after')
