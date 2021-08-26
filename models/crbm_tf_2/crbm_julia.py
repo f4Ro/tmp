@@ -268,12 +268,12 @@ class CRBM(object):
                 tf.transpose(V0, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1   [vchannels,vheight,vwidth,batch_size]  batch_shape + [in_height, in_width, in_channels
                 tf.transpose(Q0, perm=[1, 2, 0, 3]),  # 109, 1, 1, 24   109,1,1,24  [hiddenhei,hiddenwidth,batch_size,hiddenchannel] [filter_height * filter_width * in_channels, output_channels]
                                                         # (1,12,1,24),[vchannels,filterhei,filterwidth,hiddenchannel] [batch, out_height, out_width, filter_height * filter_width * in_channels].
-                [1,tf.divide(sequence_length,filter_height), 1, 1],#self.up_stride 10
+                [1,tf.divide(sequence_length,self.filter_height), 1, 1],#self.up_stride 10
                 padding='SAME')
             negative = tf.nn.conv2d(
                 tf.transpose(VN, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1
                 tf.transpose(QN, perm=[1, 2, 0, 3]),  # 120, 1, 1, 24
-                [1, tf.divide(sequence_length,filter_height), 1, 1],#self.up_stride
+                [1, tf.divide(sequence_length,self.filter_height), 1, 1],#self.up_stride
                 padding='SAME')
         ret = positive - negative
         if self.gaussian_unit:
@@ -403,7 +403,7 @@ class CRBM(object):
                 retBis = tf.nn.conv2d(
                     tf.transpose(V0, perm=[3, 1, 2, 0]),
                     tf.transpose(baseline, perm=[1, 2, 0, 3]),
-                    [1, tf.divide(sequence_length,filter_height), 1, 1], #10
+                    [1, tf.divide(sequence_length,self.filter_height), 1, 1], #10
                     padding='SAME')
             retBis = tf.transpose(retBis, perm=[1, 2, 0, 3])
             return tf.multiply(ret, retBis)
@@ -414,6 +414,7 @@ class CRBM(object):
         PARAMETERS :
         operand               :        parameter to be regularized"""
 
+        # return tf.multiply(self.weight_decay, operand)
         return tf.multiply(self.weight_decay, operand)
 
     def _get_flipped_kernel(self):
@@ -452,54 +453,110 @@ class CRBM(object):
              [0, 0]])
 
 
+# if __name__ == "__main__":
+#     sequence_length = 120
+#     num_filters = 24
+#     batch_size = 1
+#     filter_height, filter_width = 12, 1
+#     stride = 12
+#     inputs = tf.random.uniform(
+#         (batch_size, sequence_length, 1, 1), minval=0, maxval=None, dtype=tf.dtypes.float32, seed=None, name=None
+#     )
+#     print(f"SEQUENCE LENGTH: {sequence_length}")
+#     print(f"NUM FILTERS: {num_filters}")
+#     print(f"BATCH SIZE: {batch_size}")
+#     c = CRBM(
+#         'crbm',
+#         f_number=num_filters, batch_size=batch_size,
+#         f_height=filter_height, f_width=filter_width,
+#         up_stride=stride, padding=False,
+#         v_height=sequence_length, v_width=1, v_channels=1,
+#     )
+
+#     # Quickly hacked together, overfitting the C-RBM on a single example
+#     # Checkin performance before
+#     p1 = c.infer_probability(inputs, 'forward')
+#     a1 = c.draw_samples(p1)
+
+#     pv1 = c.infer_probability(a1, 'backward')
+#     av1 = c.draw_samples(pv1, 'backward')
+#     print('PRMS before', per_rms_diff(inputs, av1))
+
+#     plt.plot(inputs.numpy().reshape(-1), label='original')
+#     plt.plot(av1.numpy().reshape(-1), label='reconstruction')
+#     plt.legend()
+#     harry('before')
+
+#     # Training for some epochs
+#     for _ in range(2000):
+#         print(c.do_contrastive_divergence(inputs)[3].numpy())
+
+
+#     # Checking performance afterwards
+#     p = c.infer_probability(inputs, 'forward')
+#     a = c.draw_samples(p)
+
+#     pv = c.infer_probability(a, 'backward')
+#     av = c.draw_samples(pv, 'backward')
+#     print('PRMS after', per_rms_diff(inputs, av))
+
+#     plt.plot(inputs.numpy().reshape(-1), label='original')
+#     plt.plot(av.numpy().reshape(-1), label='reconstruction')
+#     plt.legend()
+#     harry('after')
 if __name__ == "__main__":
-    sequence_length = 120
-    num_filters = 24
     batch_size = 1
-    filter_height, filter_width = 12, 1
-    stride = 12
-    inputs = tf.random.uniform(
-        (batch_size, sequence_length, 1, 1), minval=0, maxval=None, dtype=tf.dtypes.float32, seed=None, name=None
+    sequence_length = 120
+    from data_preprocessing.berkley_lab_data import read_and_preprocess_data
+    x_train, x_test = read_and_preprocess_data(
+        sequence_length=sequence_length,
+        batch_size=batch_size,
+        motes_train=[7],
+        motes_test=[7]
     )
-    print(f"SEQUENCE LENGTH: {sequence_length}")
-    print(f"NUM FILTERS: {num_filters}")
-    print(f"BATCH SIZE: {batch_size}")
+
+    inp = x_train[:1, :, :]
+    mean = np.mean(inp)
+    inputs = tf.cast(tf.reshape(tf.constant(inp), (1, 120, 1, 1)), tf.float32)
     c = CRBM(
         'crbm',
-        f_number=num_filters, batch_size=batch_size,
-        f_height=filter_height, f_width=filter_width,
-        up_stride=stride, padding=False,
+        f_number=24, batch_size=batch_size,
+        f_height=6, f_width=1,
+        up_stride=6, padding=False,
         v_height=sequence_length, v_width=1, v_channels=1,
     )
 
     # Quickly hacked together, overfitting the C-RBM on a single example
     # Checkin performance before
-    p1 = c.infer_probability(inputs, 'forward')
-    a1 = c.draw_samples(p1)
+    def predict_and_plot(input, name):
+        p1 = c.infer_probability(input, 'forward')
+        a1 = c.draw_samples(p1)
 
-    pv1 = c.infer_probability(a1, 'backward')
-    av1 = c.draw_samples(pv1, 'backward')
-    print('PRMS before', per_rms_diff(inputs, av1))
+        pv1 = c.infer_probability(a1, 'backward')
+        av1 = c.draw_samples(pv1, 'backward')
 
-    plt.plot(inputs.numpy().reshape(-1), label='original')
-    plt.plot(av1.numpy().reshape(-1), label='reconstruction')
-    plt.legend()
-    harry('before')
+        plt.plot(input.numpy().reshape(-1), label='original')
+        plt.plot(av1.numpy().reshape(-1), label='reconstruction')
+        plt.legend()
+        harry(name)
+    predict_and_plot(inputs, 'before')
 
+    old_weights, old_h_bias, old_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
     # Training for some epochs
-    for _ in range(2000):
+    for y in range(200):
+        # predict_and_plot(inp, str(y))
+        # plot_weights(y)
         print(c.do_contrastive_divergence(inputs)[3].numpy())
 
+    new_weights, new_h_bias, new_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
 
+    _, ax = plt.subplots(24, figsize=(15,30))
+    for x in range(24):
+        old = old_weights.numpy()[:, :, :, x].reshape(-1)
+        new = new_weights.numpy()[:, :, :, x].reshape(-1)
+        ax[x].plot(old, label='old')
+        ax[x].plot(new, label='new')
+        ax[x].legend()
+    harry('weights')
     # Checking performance afterwards
-    p = c.infer_probability(inputs, 'forward')
-    a = c.draw_samples(p)
-
-    pv = c.infer_probability(a, 'backward')
-    av = c.draw_samples(pv, 'backward')
-    print('PRMS after', per_rms_diff(inputs, av))
-
-    plt.plot(inputs.numpy().reshape(-1), label='original')
-    plt.plot(av.numpy().reshape(-1), label='reconstruction')
-    plt.legend()
-    harry('after')
+    predict_and_plot(inputs, 'after')

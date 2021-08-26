@@ -30,10 +30,10 @@ class CRBM(object):
       self.filter_number         = f_number
       self.gaussian_unit         = gaussian_unit
       if gaussian_unit:
-        self.gaussian_variance   = gaussian_variance
-      self.prob_maxpooling       = prob_maxpooling
-      self.hidden_height         = v_height - f_height + 1
-      self.hidden_width          = v_width - f_width + 1
+        self.gaussian_variance   =     gaussian_variance
+      self.prob_maxpooling       =     prob_maxpooling
+      self.hidden_height         =     v_height - f_height + 1
+      self.hidden_width          =     v_width - f_width + 1
 
       self.batch_size            =     batch_size
       self.learning_rate         =     learning_rate
@@ -320,7 +320,7 @@ if __name__ == '__main__':
         f_number=24,
         batch_size=batch_size
     )
-    print(tf.__version__)
+    print('Running on tf version: ', tf.__version__)
     test_inputs = tf.random_normal((batch_size, 120, 1, 1))
 
     def run_n_times(n: int) -> None:
@@ -330,4 +330,4 @@ if __name__ == '__main__':
         return curr_loss
     with tf.Session() as sess:
         tf.initialize_all_variables().run()
-        print(sess.run(run_n_times(1)))
+        print(sess.run(run_n_times(100)))

@@ -9,6 +9,7 @@ Then run the code of the model
 (because of shared code and the python import system, this has to be done from the root folder)
 ```zh
 cd /home/paperspace/development && python -m models.crbm_tf_2.crbm
+cd /home/paperspace/development && python -m models.crbm_tf_2.crbm_julia
 ```
 
 To the activate the (or any other) virtual environment, do:

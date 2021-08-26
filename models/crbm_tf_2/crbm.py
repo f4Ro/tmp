@@ -223,7 +223,8 @@ class CRBM(object):
             dist = tfp.distributions.MultivariateNormalDiag(mu, self.sigma)
             samples = dist.sample()
             return tf.reshape(
-                samples, [self.batch_size, self.visible_height, self.visible_width, self.visible_channels])
+                samples, [self.batch_size, self.visible_height, self.visible_width, self.visible_channels]
+                )
         elif method == 'forward':
             height = self.hidden_height
             width = self.hidden_width
@@ -287,13 +288,16 @@ class CRBM(object):
         g_biais_H_sparsity = self._get_param_sparsity_penalty('hidden_bias', Q0, V0)
 
         'UPDATE ALL'
+        ret_w = None
         ret_w = self._apply_grad(
             self.kernels, g_weight, self.vitesse_kernels, wd=True, wd_value=g_weight_l2, sparsity=True,
             sparsity_value=g_weight_sparsity, global_step=global_step)
-        ret_bv = self._apply_grad(self.biases_V, g_biais_V, self.vitesse_biases_V,
-                                  global_step=global_step)
-        ret_bh = self._apply_grad(self.biases_H, g_biais_H, self.vitesse_biases_H, sparsity=True,
-                                  sparsity_value=g_biais_H_sparsity, global_step=global_step)
+        ret_bv = None
+        ret_bh = None
+        # ret_bv = self._apply_grad(self.biases_V, g_biais_V, self.vitesse_biases_V,
+        #                           global_step=global_step)
+        # ret_bh = self._apply_grad(self.biases_H, g_biais_H, self.vitesse_biases_H, sparsity=True,
+        #                           sparsity_value=g_biais_H_sparsity, global_step=global_step)
         cost = tf.reduce_sum(tf.square(tf.subtract(data, VN)))
         update = tf.reduce_sum(VN)
         return ret_w, ret_bv, ret_bh, cost, update
@@ -453,9 +457,24 @@ if __name__ == "__main__":
     batch_size = 1
     filter_height, filter_width = 12, 1
     stride = 1
-    inputs = tf.random.uniform(
-        (batch_size, sequence_length, 1, 1), minval=0, maxval=None, dtype=tf.dtypes.float32, seed=None, name=None
+    from data_preprocessing.berkley_lab_data import read_and_preprocess_data
+    x_train, x_test = read_and_preprocess_data(
+        should_smooth=False,
+        smoothing_window=100,
+        sequence_length=sequence_length,
+        cut_off_min=5,
+        cut_off_max=45,
+        should_scale=True,
+        data_path="datasets/data.txt",
+        batch_size=batch_size,
+        motes_train=[7],
+        motes_test=[7]
     )
+
+    inp = x_train[:1, :, :]
+    mean = np.mean(inp)
+    inputs = tf.cast(tf.reshape(tf.constant(inp), (1, 120, 1, 1)), tf.float32)
+
     print(f"SEQUENCE LENGTH: {sequence_length}")
     print(f"NUM FILTERS: {num_filters}")
     print(f"BATCH SIZE: {batch_size}")
@@ -480,9 +499,10 @@ if __name__ == "__main__":
     plt.plot(av1.numpy().reshape(-1), label='reconstruction')
     plt.legend()
     harry('before')
+    old_weights = tf.identity(c.kernels)
 
     # Training for some epochs
-    for _ in range(2000):
+    for _ in range(200):
         print(c.do_contrastive_divergence(inputs)[3].numpy())
 
 
@@ -498,3 +518,14 @@ if __name__ == "__main__":
     plt.plot(av.numpy().reshape(-1), label='reconstruction')
     plt.legend()
     harry('after')
+
+    # Visualize weight updates
+    new_weights = tf.identity(c.kernels)
+    _, ax = plt.subplots(24, figsize=(15,30))
+    for x in range(24):
+        old = old_weights.numpy()[:, :, :, x].reshape(-1)
+        new = new_weights.numpy()[:, :, :, x].reshape(-1)
+        ax[x].plot(old, label='old')
+        ax[x].plot(new, label='new')
+        ax[x].legend()
+    harry('weights')
