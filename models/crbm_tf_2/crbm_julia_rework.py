@@ -2,7 +2,7 @@ from __future__ import annotations, division
 
 # Set seeds
 from numpy.random import seed; seed(1)
-from tensorflow.random import set_seed; set_seed(10)
+from tensorflow.random import set_seed; set_seed(1)
 
 from typing import Any
 
@@ -12,6 +12,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from util.plotter import Plotter
 from shared_code.per_rms_diff import per_rms_diff
+from data_preprocessing.berkley_lab_data import read_and_preprocess_data
 
 harry = Plotter('CRBM_dev', plt)
 
@@ -23,7 +24,7 @@ class CRBM(object):
             self: CRBM, name: str, fully_connected: bool = False, v_height: int = 1, v_width: int = 1, v_channels: int = 784,
             f_height: int = 1, f_width: int = 1, up_stride: int = 1, side_stride: int = 1, f_number: int = 400, init_biases_H: int = -3, init_biases_V: float = 0.01,
             init_weight_stddev: float = 0.01, gaussian_unit: bool = True, gaussian_variance: float = 0.2,
-            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.0001, learning_rate_w: float = 10,
+            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.0001, learning_rate_w: float = 0.005,
             learning_rate_decay: float = 0.5, momentum: float = 0.9, decay_step: int = 50000, weight_decay: float = 0.1,
             sparsity_target: float = 0.1, sparsity_coef: float = 0.1) -> None:
         """INTENT : Initialization of a Convolutional Restricted Boltzmann Machine
@@ -86,9 +87,9 @@ class CRBM(object):
             self.sparsity_coef = sparsity_coef
 
             with tf.device('/cpu:0'):
-                # self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.truncated_normal(
-                #     stddev=init_weight_stddev)(shape=(f_height, f_width, v_channels, f_number)))
-                self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.zeros()(shape=(f_height, f_width, v_channels, f_number)))
+                self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.truncated_normal(
+                    stddev=init_weight_stddev)(shape=(f_height, f_width, v_channels, f_number)))
+                # self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.zeros()(shape=(f_height, f_width, v_channels, f_number)))
                 self.biases_V = tf.Variable(name='biases_V',
                                             initial_value=tf.keras.initializers.Constant(init_biases_V)
                                             (shape=(v_channels)))
@@ -129,6 +130,7 @@ class CRBM(object):
                 conv = tf.divide(conv, self.gaussian_variance)
             bias = tf.nn.bias_add(conv, self.biases_H)
             if self.prob_maxpooling:
+                raise Exception('foo')
                 'SPECIFIC CASE where we enable probabilistic max pooling'
                 exp = tf.exp(bias)
                 custom_kernel = tf.constant(1.0, shape=[2, 2, self.filter_number, 1])
@@ -140,6 +142,7 @@ class CRBM(object):
                         for k in range(self.filter_number):
                             ret_kernel[i, j, k, k] = 1
                 custom_kernel_bis = tf.constant(ret_kernel, dtype=tf.float32)
+                raise Excpetion('bar')
                 sum_bis = tf.nn.conv2d_transpose(
                     sum, custom_kernel_bis,
                     (self.batch_size, self.hidden_height, self.hidden_width, self.filter_number), #self.visible_channels
@@ -158,17 +161,19 @@ class CRBM(object):
         'If not gaussian then return the binary probability wich is sigmoid'
         if method == 'backward':
             if self.padding:
+                raise Exception('12332323')
                 conv = tf.nn.conv2d(operand, self._get_flipped_kernel(), [1, self.up_stride, 1, 1], padding='SAME')
             else:
                 padded_input = self._get_padded_hidden(operand)
                 flipped_kernel = self._get_flipped_kernel()
+                print(padded_input.shape, flipped_kernel.shape)
                 conv = tf.nn.conv2d_transpose(
-                    operand, #padded_input,
-                    self.kernels, # ,self.kernels,
-                    (self.batch_size, sequence_length, self.hidden_width, self.visible_channels),#self.filter_number
-                    [1, self.up_stride, 1, 1],
+                    padded_input,
+                    flipped_kernel,
+                    (self.batch_size, sequence_length, self.visible_width, self.visible_channels),#self.filter_number
+                    [1, 1, 1, 1],
                     data_format="NHWC",
-                    padding='VALID')
+                    padding='SAME')
             if self.gaussian_unit:
                 conv = tf.multiply(conv, self.gaussian_variance)
             bias = tf.nn.bias_add(conv, self.biases_V)
@@ -229,23 +234,21 @@ class CRBM(object):
             # Q0_ = tf.transpose(Q0, perm=[1, 0, 2, 3])
             # positive = tf.nn.conv2d(V0, Q0_, [1, tf.divide(sequence_length, self.filter_height), 1, 1], padding='SAME'); print(positive.shape)
             # negative = tf.nn.conv2d(V0, Q0_, [1, tf.divide(sequence_length, self.filter_height), 1, 1], padding='SAME'); print(negative.shape)
+            # print(self.hidden_height)
+            # print(tf.divide(sequence_length, self.filter_height))
             positive = tf.nn.conv2d(
                 tf.transpose(V0, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1   [vchannels,vheight,vwidth,batch_size]  batch_shape + [in_height, in_width, in_channels
-                tf.transpose(Q0, perm=[1, 2, 0, 3]),  # 109, 1, 1, 24   109,1,1,24  [hiddenhei,hiddenwidth,batch_size,hiddenchannel] [filter_height * filter_width * in_channels, output_channels]
+                tf.transpose(Q0, perm=[1, 2, 0, 3]),  # 10, 1, 1, 24   [hiddenhei,hiddenwidth,batch_size,hiddenchannel] [filter_height * filter_width * in_channels, output_channels]
                                                         # (1,12,1,24),[vchannels,filterhei,filterwidth,hiddenchannel] [batch, out_height, out_width, filter_height * filter_width * in_channels].
                 [1, tf.divide(sequence_length, self.filter_height), 1, 1],#self.up_stride 10
                 padding='SAME')
             negative = tf.nn.conv2d(
                 tf.transpose(VN, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1
-                tf.transpose(QN, perm=[1, 2, 0, 3]),  # 120, 1, 1, 24
+                tf.transpose(QN, perm=[1, 2, 0, 3]),  # 10, 1, 1, 24
                 [1, tf.divide(sequence_length, self.filter_height), 1, 1],#self.up_stride
                 padding='SAME')
         ret = positive - negative
-        print(positive)
-        print('--------'*10)
-        print(negative)
-        print('--------'*10)
-        # print(negative)
+
         if self.gaussian_unit:
             ret = tf.divide(ret, self.gaussian_variance)
         g_weight = tf.divide(tf.transpose(ret, perm=[1, 2, 0, 3]), self.batch_size)
@@ -356,8 +359,8 @@ class CRBM(object):
         ------------------------------------------------------------------------------------------------------------------------------------------
         """
 
-
-        return tf.transpose(tf.reverse(self.kernels, [0, 1]), perm=[0, 1, 3, 2])
+        return tf.reverse(self.kernels, [0, 1])
+        # return tf.transpose(tf.reverse(self.kernels, [0, 1]), perm=[0, 1, 3, 2])
         # return tf.transpose(tf.reverse(self.kernels, [True, True, False, False]), perm=[0, 1, 3, 2])
 
     def _get_padded_hidden(self, hidden):
@@ -366,11 +369,14 @@ class CRBM(object):
         """
 
         return tf.pad(
-            hidden,
-            [[0, 0],
-             [self.filter_height - 1, self.filter_height - 1],
-             [self.filter_width - 1, self.filter_width - 1],
-             [0, 0]])
+                hidden,
+                tf.constant(
+                    ([0, 0],
+                    [self.filter_height - 1, self.filter_height - 1],
+                    [self.filter_width - 1, self.filter_width - 1],
+                    [0, 0])
+             )
+        )
 
     def _get_padded_visible(self: CRBM, visible):
         """INTENT : Add padding to the visible layer so that it can be convolved with hidden layer to compute weight gradient update
@@ -387,64 +393,74 @@ class CRBM(object):
              [0, 0]])
 
 if __name__ == "__main__":
+    should_scale_down = False
+    should_plot_training_substeps = False
+
     batch_size = 1
-    sequence_length = 120
-    from data_preprocessing.berkley_lab_data import read_and_preprocess_data
+    sequence_length = 24
+    filter_length = 12
+    n_filters = 24
+
+    ###
     x_train, x_test = read_and_preprocess_data(
         sequence_length=sequence_length,
         batch_size=batch_size,
         motes_train=[7],
         motes_test=[7]
     )
+    inp = None
+    block = np.divide(np.arange(-int(6), int(6)), 6) if should_scale_down else np.arange(-int(6), int(6))
 
-    # inp = x_train[:1, :, :]
-    inp = np.ones((1, 120, 1))
+    for _ in range(int(sequence_length/filter_length)):
+        if inp is None:
+            inp = block
+        else:
+            inp = np.concatenate((inp, block))
+
+
     mean = np.mean(inp)
-    inputs = tf.cast(tf.reshape(tf.constant(inp), (1, 120, 1, 1)), tf.float32)
+    inputs = tf.cast(tf.reshape(tf.constant(inp), (1, sequence_length, 1, 1)), tf.float32)
+
     c = CRBM(
         'crbm',
-        f_number=24, batch_size=batch_size,
-        f_height=12, f_width=1,
-        up_stride=1, padding=False,
+        f_number=n_filters, batch_size=batch_size,
+        f_height=filter_length, f_width=1,
+        up_stride=filter_length, padding=False,
         v_height=sequence_length, v_width=1, v_channels=1,
         init_biases_H = -3.81,
-        init_biases_V = 1.0
+        init_biases_V = mean
     )
 
-    # Quickly hacked together, overfitting the C-RBM on a single example
-    # Checkin performance before
-    def predict_and_plot(input, name):
-        p1 = c.infer_probability(input, 'forward')
+    def predict_and_plot(inp, name):
+        p1 = c.infer_probability(inp, 'forward')
         a1 = c.draw_samples(p1)
 
         pv1 = c.infer_probability(a1, 'backward')
         av1 = c.draw_samples(pv1, 'backward')
 
-        plt.plot(input.numpy().reshape(-1), label='original')
+        plt.plot(inp.numpy().reshape(-1), label='original')
         plt.plot(av1.numpy().reshape(-1), label='reconstruction')
         plt.legend()
         harry(name)
-    predict_and_plot(inputs, 'before')
+        return per_rms_diff(inp, av1)
+    prms_before = predict_and_plot(inputs, 'before')
 
     old_weights, old_h_bias, old_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
     # Training for some epochs
     losses = []
-    for y in range(1):
-        # predict_and_plot(inp, str(y))
-        # plot_weights(y)
-        _, _, _, cost, update =c.do_contrastive_divergence(inputs)
+    num_epochs = 10
+    for y in range(num_epochs):
+        _, _, _, cost, _ =c.do_contrastive_divergence(inputs)
         losses.append(cost)
-        # print(cost.numpy(), update.numpy())
-        if y % 5 == 0: predict_and_plot(inputs, f'{y}')
+        if should_plot_training_substeps:
+            if y % int(num_epochs/10) == 0: predict_and_plot(inputs, f'{y}')
     plt.plot(losses)
     harry('learning_curve')
 
     new_weights, new_h_bias, new_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
-    print(new_h_bias.numpy())
-    print(new_v_bias.numpy())
 
-    _, ax = plt.subplots(24, figsize=(15,50))
-    for x in range(24):
+    _, ax = plt.subplots(n_filters+1, figsize=(15,50))
+    for x in range(n_filters):
         old = old_weights.numpy()[:, :, :, x].reshape(-1)
         new = new_weights.numpy()[:, :, :, x].reshape(-1)
         ax[x].plot(old, label=f'old_{x}')
@@ -453,10 +469,5 @@ if __name__ == "__main__":
     harry('weights')
     plt.figure(figsize=(8, 6))
     # Checking performance afterwards
-    predict_and_plot(inputs, 'after')
-
-    # for index1, weight1 in enumerate(new_weights):
-    #     print(f'COMPARING WEIGHT {index1+1} TO OTHERS')
-    #     for index2, weight2 in enumerate(new_weights):
-    #         if index1 != index2:
-    #             print(index2, per_rms_diff(weight1, weight2), per_rms_diff(weight2, weight1))
+    prms_after = predict_and_plot(inputs, 'after')
+    print(f'PRMS from {prms_before} -> {prms_after}')
