@@ -1,10 +1,8 @@
 from __future__ import annotations, division
 
 # Set seeds
-from numpy.random import seed
-from tensorflow.random import set_seed
-seed(1)
-set_seed(10)
+from numpy.random import seed; seed(1)
+from tensorflow.random import set_seed; set_seed(10)
 
 from typing import Any
 
@@ -25,8 +23,8 @@ class CRBM(object):
             self: CRBM, name: str, fully_connected: bool = False, v_height: int = 1, v_width: int = 1, v_channels: int = 784,
             f_height: int = 1, f_width: int = 1, up_stride: int = 1, side_stride: int = 1, f_number: int = 400, init_biases_H: int = -3, init_biases_V: float = 0.01,
             init_weight_stddev: float = 0.01, gaussian_unit: bool = True, gaussian_variance: float = 0.2,
-            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.0001,
-            learning_rate_decay: float = 0.5, learning_rate_w: float = 0.002, momentum: float = 0.9, decay_step: int = 50000, weight_decay: float = 0.1,
+            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.0001, learning_rate_w: float = 10,
+            learning_rate_decay: float = 0.5, momentum: float = 0.9, decay_step: int = 50000, weight_decay: float = 0.1,
             sparsity_target: float = 0.1, sparsity_coef: float = 0.1) -> None:
         """INTENT : Initialization of a Convolutional Restricted Boltzmann Machine
         ------------------------------------------------------------------
@@ -88,8 +86,9 @@ class CRBM(object):
             self.sparsity_coef = sparsity_coef
 
             with tf.device('/cpu:0'):
-                self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.truncated_normal(
-                    stddev=init_weight_stddev)(shape=(f_height, f_width, v_channels, f_number)))
+                # self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.truncated_normal(
+                #     stddev=init_weight_stddev)(shape=(f_height, f_width, v_channels, f_number)))
+                self.kernels = tf.Variable(name='weights', initial_value=tf.keras.initializers.zeros()(shape=(f_height, f_width, v_channels, f_number)))
                 self.biases_V = tf.Variable(name='biases_V',
                                             initial_value=tf.keras.initializers.Constant(init_biases_V)
                                             (shape=(v_channels)))
@@ -113,43 +112,6 @@ class CRBM(object):
             print(error.args)
             print('--------------------------')
             raise error
-
-    def compute_energy(self: CRBM, visible, hidden, method='forward') -> Any:
-        """INTENT : Compute the energy of the configuration (visible,hidden) given in parameters
-        ------------------------------------------------------------------------------------------------------------------------------------------
-        REMARK : The returned result is per configuration so does not depend on the batch_size"""
-
-        if method == 'forward':
-            if self.padding:
-                conv = tf.nn.conv2d(visible, self.kernels, [1, self.up_stride, 1, 1], padding='SAME')
-            else:
-                conv = tf.nn.conv2d(visible, self.kernels, [1, self.up_stride, 1, 1], padding='VALID')
-            operand = hidden
-        elif method == 'backward':
-            if self.padding:
-                conv = tf.nn.conv2d(hidden, self._get_flipped_kernel(), [1, self.up_stride, 1, 1], padding='SAME')
-            else:
-                conv = tf.nn.conv2d(
-                    self._get_padded_hidden(hidden),
-                    self._get_flipped_kernel(),
-                    [1, self.up_stride, 1, 1],
-                    padding='VALID')
-            operand = visible
-        weight = tf.reduce_sum(tf.multiply(operand, conv))
-        bias_H = tf.reduce_sum(tf.multiply(self.biases_H, tf.reduce_sum(hidden, [0, 1, 2])))
-
-        if self.gaussian_unit:
-            'GAUSSIAN UNIT IN VISIBLE LAYER'
-            weight = tf.divide(weight, self.gaussian_variance)
-            bias_V = tf.reduce_sum(tf.square(tf.subtract(visible, tf.reshape(
-                self.biases_V, [1, 1, 1, self.visible_channels]))))
-            bias_V = tf.divide(bias_V, 2 * self.gaussian_variance * self.gaussian_variance)
-            output = tf.subtract(bias_V, tf.add(bias_H, weight))
-        else:
-            'BINARY UNIT IN VISIBLE LAYER'
-            bias_V = tf.reduce_sum(tf.multiply(self.biases_V, tf.reduce_sum(visible, [0, 1, 2])))
-            output = tf.multiply(-1, tf.add(weight, tf.add(bias_H, bias_V)))
-        return tf.divide(output, self.batch_size)
 
     def infer_probability(self: CRBM, operand, method, result='hidden'):
         """INTENT : Compute the probabily of activation of one layer given the other
@@ -252,6 +214,7 @@ class CRBM(object):
         'FOR WEIGHT'
         # [vchannels,vheight,vwidth,batch_size] 1,120,1,1 conv with [hiddenhei,hiddenwidth,batch_size,hiddenchannel] 109,1,1,24 give a [vchannels,filterhei,filterwidth,hiddenchannel] filter 1,12,1,24
         if self.padding:
+            raise Exception('test')
             positive = tf.nn.conv2d(
                 self._get_padded_visible(tf.transpose(V0, perm=[3, 1, 2, 0])),
                 tf.transpose(Q0, perm=[1, 2, 0, 3]),
@@ -263,18 +226,26 @@ class CRBM(object):
                 [1, self.up_stride, 1, 1], #
                 padding='VALID')
         else:
+            # Q0_ = tf.transpose(Q0, perm=[1, 0, 2, 3])
+            # positive = tf.nn.conv2d(V0, Q0_, [1, tf.divide(sequence_length, self.filter_height), 1, 1], padding='SAME'); print(positive.shape)
+            # negative = tf.nn.conv2d(V0, Q0_, [1, tf.divide(sequence_length, self.filter_height), 1, 1], padding='SAME'); print(negative.shape)
             positive = tf.nn.conv2d(
                 tf.transpose(V0, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1   [vchannels,vheight,vwidth,batch_size]  batch_shape + [in_height, in_width, in_channels
                 tf.transpose(Q0, perm=[1, 2, 0, 3]),  # 109, 1, 1, 24   109,1,1,24  [hiddenhei,hiddenwidth,batch_size,hiddenchannel] [filter_height * filter_width * in_channels, output_channels]
                                                         # (1,12,1,24),[vchannels,filterhei,filterwidth,hiddenchannel] [batch, out_height, out_width, filter_height * filter_width * in_channels].
-                [1,tf.divide(sequence_length,self.filter_height), 1, 1],#self.up_stride 10
+                [1, tf.divide(sequence_length, self.filter_height), 1, 1],#self.up_stride 10
                 padding='SAME')
             negative = tf.nn.conv2d(
                 tf.transpose(VN, perm=[3, 1, 2, 0]),  # 1, 120, 1, 1
                 tf.transpose(QN, perm=[1, 2, 0, 3]),  # 120, 1, 1, 24
-                [1, tf.divide(sequence_length,self.filter_height), 1, 1],#self.up_stride
+                [1, tf.divide(sequence_length, self.filter_height), 1, 1],#self.up_stride
                 padding='SAME')
         ret = positive - negative
+        print(positive)
+        print('--------'*10)
+        print(negative)
+        print('--------'*10)
+        # print(negative)
         if self.gaussian_unit:
             ret = tf.divide(ret, self.gaussian_variance)
         g_weight = tf.divide(tf.transpose(ret, perm=[1, 2, 0, 3]), self.batch_size)
@@ -295,48 +266,12 @@ class CRBM(object):
                                   global_step=global_step)
         ret_bh = self._apply_grad(self.biases_H, g_biais_H, self.vitesse_biases_H, self.learning_rate, sparsity=True,
                                   sparsity_value=g_biais_H_sparsity, global_step=global_step)
-        ret_bv, ret_bh = None, None
         ret_w = self._apply_grad(self.kernels, g_weight, self.vitesse_kernels, self.learning_rate_w, wd=False, wd_value=g_weight_l2, sparsity=False,
             sparsity_value=g_weight_sparsity, global_step=global_step)
 
         cost = tf.reduce_sum(tf.square(tf.subtract(data, VN)))
         update = tf.reduce_sum(VN)
         return ret_w, ret_bv, ret_bh, cost, update
-
-    def save_parameter(self: CRBM, path, sess, step):
-        """INTENT : Save parameter of the RBM
-        ------------------------------------------------------------------------------------------------------------------------------------------
-        PARAMETERS :
-        path        :       where to save
-        sess        :       which session = context to take value from
-        step        :       how many step are we at
-        """
-        saver = tf.train.Saver([self.kernels, self.biases_V, self.biases_H])
-        return saver.save(sess, path, global_step=step)
-
-    def load_parameter(self: CRBM, path, sess):
-        """INTENT : Load parameter of this RBM if the save file exist
-        ------------------------------------------------------------------------------------------------------------------------------------------
-        PARAMETERS :
-        path               :        where is the save file
-        sess               :        the session = context we want to load the parameter"""
-
-        saver = tf.train.Saver([self.kernels, self.biases_V, self.biases_H])
-        return saver.restore(sess, path)
-
-    def init_parameter(self: CRBM, from_scratch=True):
-        """INTENT : Return the tensorflow operation for initializing the parameter of this RBM
-        ------------------------------------------------------------------------------------------------------------------------------------------
-        PARAMETERS :
-        from_scratch               :        specifiy if this RBM is pretrained (True) or restored in order to adjust which variable to initialize"""
-
-        if from_scratch:
-            return tf.initialize_all_variables()
-        elif self.gaussian_unit:
-            return tf.initialize_variables(
-                [self.vitesse_kernels, self.vitesse_biases_V, self.vitesse_biases_H, self.sigma])
-        else:
-            return tf.initialize_variables([self.vitesse_kernels, self.vitesse_biases_V, self.vitesse_biases_H])
 
     def _do_gibbs_chain(self: CRBM, data, n=1):
         """INTENT : Do one chain of length n starting from input and yields V0 Q0 VN QN in order to compute gradient
@@ -451,58 +386,6 @@ class CRBM(object):
               np.ceil((self.filter_width - 1) / 2).astype(int)],
              [0, 0]])
 
-
-# if __name__ == "__main__":
-#     sequence_length = 120
-#     num_filters = 24
-#     batch_size = 1
-#     filter_height, filter_width = 12, 1
-#     stride = 12
-#     inputs = tf.random.uniform(
-#         (batch_size, sequence_length, 1, 1), minval=0, maxval=None, dtype=tf.dtypes.float32, seed=None, name=None
-#     )
-#     print(f"SEQUENCE LENGTH: {sequence_length}")
-#     print(f"NUM FILTERS: {num_filters}")
-#     print(f"BATCH SIZE: {batch_size}")
-#     c = CRBM(
-#         'crbm',
-#         f_number=num_filters, batch_size=batch_size,
-#         f_height=filter_height, f_width=filter_width,
-#         up_stride=stride, padding=False,
-#         v_height=sequence_length, v_width=1, v_channels=1,
-#     )
-
-#     # Quickly hacked together, overfitting the C-RBM on a single example
-#     # Checkin performance before
-#     p1 = c.infer_probability(inputs, 'forward')
-#     a1 = c.draw_samples(p1)
-
-#     pv1 = c.infer_probability(a1, 'backward')
-#     av1 = c.draw_samples(pv1, 'backward')
-#     print('PRMS before', per_rms_diff(inputs, av1))
-
-#     plt.plot(inputs.numpy().reshape(-1), label='original')
-#     plt.plot(av1.numpy().reshape(-1), label='reconstruction')
-#     plt.legend()
-#     harry('before')
-
-#     # Training for some epochs
-#     for _ in range(2000):
-#         print(c.do_contrastive_divergence(inputs)[3].numpy())
-
-
-#     # Checking performance afterwards
-#     p = c.infer_probability(inputs, 'forward')
-#     a = c.draw_samples(p)
-
-#     pv = c.infer_probability(a, 'backward')
-#     av = c.draw_samples(pv, 'backward')
-#     print('PRMS after', per_rms_diff(inputs, av))
-
-#     plt.plot(inputs.numpy().reshape(-1), label='original')
-#     plt.plot(av.numpy().reshape(-1), label='reconstruction')
-#     plt.legend()
-#     harry('after')
 if __name__ == "__main__":
     batch_size = 1
     sequence_length = 120
@@ -524,6 +407,8 @@ if __name__ == "__main__":
         f_height=12, f_width=1,
         up_stride=1, padding=False,
         v_height=sequence_length, v_width=1, v_channels=1,
+        init_biases_H = -3.81,
+        init_biases_V = 1.0
     )
 
     # Quickly hacked together, overfitting the C-RBM on a single example
@@ -544,48 +429,34 @@ if __name__ == "__main__":
     old_weights, old_h_bias, old_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
     # Training for some epochs
     losses = []
-    for y in range(6):
+    for y in range(1):
         # predict_and_plot(inp, str(y))
         # plot_weights(y)
         _, _, _, cost, update =c.do_contrastive_divergence(inputs)
         losses.append(cost)
-        print(cost.numpy(), update.numpy())
+        # print(cost.numpy(), update.numpy())
         if y % 5 == 0: predict_and_plot(inputs, f'{y}')
     plt.plot(losses)
     harry('learning_curve')
 
     new_weights, new_h_bias, new_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
+    print(new_h_bias.numpy())
+    print(new_v_bias.numpy())
 
-    _, ax = plt.subplots(24, figsize=(15,30))
+    _, ax = plt.subplots(24, figsize=(15,50))
     for x in range(24):
         old = old_weights.numpy()[:, :, :, x].reshape(-1)
         new = new_weights.numpy()[:, :, :, x].reshape(-1)
-        ax[x].plot(old, label='old')
-        ax[x].plot(new, label='new')
+        ax[x].plot(old, label=f'old_{x}')
+        ax[x].plot(new, label=f'new_{x}')
         ax[x].legend()
     harry('weights')
     plt.figure(figsize=(8, 6))
     # Checking performance afterwards
     predict_and_plot(inputs, 'after')
 
-    ow_ = old_weights.numpy()
-    nw_ = new_weights.numpy()
-
-
-    print('-------- Comparison new old')
-    for o, n in zip(ow_, nw_):
-        print(per_rms_diff(o, n), per_rms_diff(n, o))
-
-    print('---------- Comparison ')
-    for i in range(len(nw_)):
-        if i + 1 < len(nw_):
-            w1 = nw_[i]
-            w2 = nw_[i+1]
-            print(per_rms_diff(w1, w2), per_rms_diff(w2, w1))
-    print('---------')
-
-    # for i, ow in enumerate(ow_):
-    #     for y, nw in enumerate(nw_):
-    #         print(i, ow)
-    #         print(y, nw)
-    #         print('---')
+    # for index1, weight1 in enumerate(new_weights):
+    #     print(f'COMPARING WEIGHT {index1+1} TO OTHERS')
+    #     for index2, weight2 in enumerate(new_weights):
+    #         if index1 != index2:
+    #             print(index2, per_rms_diff(weight1, weight2), per_rms_diff(weight2, weight1))
