@@ -164,14 +164,11 @@ class CRBM(object):
                 raise Exception('12332323')
                 conv = tf.nn.conv2d(operand, self._get_flipped_kernel(), [1, self.up_stride, 1, 1], padding='SAME')
             else:
-                padded_input = self._get_padded_hidden(operand)
-                flipped_kernel = self._get_flipped_kernel()
-                print(padded_input.shape, flipped_kernel.shape)
                 conv = tf.nn.conv2d_transpose(
-                    padded_input,
-                    flipped_kernel,
+                    operand,
+                    self.kernels,
                     (self.batch_size, sequence_length, self.visible_width, self.visible_channels),#self.filter_number
-                    [1, 1, 1, 1],
+                    [1, self.up_stride, 1, 1],
                     data_format="NHWC",
                     padding='SAME')
             if self.gaussian_unit:
@@ -397,10 +394,11 @@ if __name__ == "__main__":
     should_plot_training_substeps = False
 
     batch_size = 1
-    sequence_length = 24
+    sequence_length = 12
     filter_length = 12
     n_filters = 24
 
+    num_epochs = 40
     ###
     x_train, x_test = read_and_preprocess_data(
         sequence_length=sequence_length,
@@ -416,7 +414,6 @@ if __name__ == "__main__":
             inp = block
         else:
             inp = np.concatenate((inp, block))
-
 
     mean = np.mean(inp)
     inputs = tf.cast(tf.reshape(tf.constant(inp), (1, sequence_length, 1, 1)), tf.float32)
@@ -448,7 +445,6 @@ if __name__ == "__main__":
     old_weights, old_h_bias, old_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
     # Training for some epochs
     losses = []
-    num_epochs = 10
     for y in range(num_epochs):
         _, _, _, cost, _ =c.do_contrastive_divergence(inputs)
         losses.append(cost)
@@ -459,7 +455,7 @@ if __name__ == "__main__":
 
     new_weights, new_h_bias, new_v_bias = tf.identity(c.kernels), tf.identity(c.biases_H), tf.identity(c.biases_V)
 
-    _, ax = plt.subplots(n_filters+1, figsize=(15,50))
+    _, ax = plt.subplots(n_filters, figsize=(15,50))
     for x in range(n_filters):
         old = old_weights.numpy()[:, :, :, x].reshape(-1)
         new = new_weights.numpy()[:, :, :, x].reshape(-1)
