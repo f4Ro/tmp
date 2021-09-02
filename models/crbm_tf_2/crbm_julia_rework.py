@@ -24,7 +24,7 @@ class CRBM(object):
             self: CRBM, name: str, fully_connected: bool = False, v_height: int = 1, v_width: int = 1, v_channels: int = 784,
             f_height: int = 1, f_width: int = 1, up_stride: int = 1, side_stride: int = 1, f_number: int = 400, init_biases_H: int = -3, init_biases_V: float = 0.01,
             init_weight_stddev: float = 0.01, gaussian_unit: bool = True, gaussian_variance: float = 0.2,
-            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.0001, learning_rate_w: float = 0.005,
+            prob_maxpooling: bool = False, padding: bool = False, batch_size: int = 20, learning_rate: float = 0.00025, learning_rate_w: float = 0.001,
             learning_rate_decay: float = 0.5, momentum: float = 0.9, decay_step: int = 50000, weight_decay: float = 0.1,
             sparsity_target: float = 0.1, sparsity_coef: float = 0.1) -> None:
         """INTENT : Initialization of a Convolutional Restricted Boltzmann Machine
@@ -394,11 +394,11 @@ if __name__ == "__main__":
     should_plot_training_substeps = False
 
     batch_size = 1
-    sequence_length = 12
+    sequence_length = 48
     filter_length = 12
     n_filters = 24
 
-    num_epochs = 40
+    num_epochs = 28
     ###
     x_train, x_test = read_and_preprocess_data(
         sequence_length=sequence_length,
